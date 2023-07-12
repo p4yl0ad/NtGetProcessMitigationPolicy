@@ -4,7 +4,7 @@ Based on the research from the following link:
 - https://unit42.paloaltonetworks.com/junctions-windows-redirection-trust-mitigation/
 
 ## Output
-```
+```c
 Debugging: C:\Users\p4\source\repos\NtGetProcessMitigationPolicy\x64\Debug\NtGetProcessMitigationPolicy.exe
 Database file: Z:\TOOLING\TOOLS\snapshot_2022-06-15_20-02\release\x64\db\NtGetProcessMitigationPolicy.exe.dd64
 Process Started: 00007FF68D810000 C:\Users\p4\source\repos\NtGetProcessMitigationPolicy\x64\Debug\NtGetProcessMitigationPolicy.exe
