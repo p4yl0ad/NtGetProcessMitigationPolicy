@@ -41,7 +41,89 @@ File Type: EXECUTABLE IMAGE
 #include <phnt_windows.h>
 #include <phnt.h>
 
-BOOL enable_sedebug() 
+/*
+* EnableSeDebug
+*
+* Purpose:
+*
+* Enable SeDebugPrivilege for process
+*
+* bastardized version of this https://github.com/nettitude/DLLInjection/blob/master/Nettitude/Injection/SeDebugPrivilege.cpp
+*/
+
+BOOL EnableSeDebug(
+	void
+);
+
+/*
+* supGetProcessMitigationPolicy
+*
+* Purpose:
+*
+* Request process mitigation policy values.
+*
+* Thanks to hfiref0x for this (https://github.dev/hfiref0x/WinObjEx64/blob/master/Source/WinObjEx64/props/propBasic.c)
+*/
+
+BOOL supGetProcessMitigationPolicy(
+	_In_ HANDLE hProcess,
+	_In_ PROCESS_MITIGATION_POLICY Policy,
+	_In_ SIZE_T Size,
+	_Out_writes_bytes_(Size) PVOID Buffer
+);
+
+/*
+* EnumProcesses
+*
+* Purpose:
+*
+* Take SystemProcessInformation snapshot and iterate over every process
+* Open each process via PID and query ProcessRedirectionTrustPolicy
+*
+*/
+
+BOOL EnumProcesses(
+	void
+);
+
+/*
+* CustomEntry
+*
+* Purpose:
+*
+* Custom main function
+*
+*/
+
+void CustomEntry() {
+	DbgPrint("[DEBUG] CustomEntry\n");
+
+	//
+	// Try and enable SeDebugPrivilege
+	//
+
+	if (FALSE == EnableSeDebug())
+		RtlExitUserProcess(-1);
+
+	//
+	// Enum and check processes for ProcessRedirectionTrustPolicy mitigation
+	//
+
+	if (FALSE == EnumProcesses())
+		RtlExitUserProcess(-1);
+}
+
+/*
+* EnableSeDebug
+*
+* Purpose:
+*
+* Enable SeDebugPrivilege for process 
+*
+* bastardized version of this https://github.com/nettitude/DLLInjection/blob/master/Nettitude/Injection/SeDebugPrivilege.cpp
+*/
+
+BOOL EnableSeDebug()
 {
 	BOOLEAN SeDebugWasEnabled = FALSE;
 	if (NT_SUCCESS(RtlAdjustPrivilege(
@@ -101,7 +183,17 @@ BOOL supGetProcessMitigationPolicy(
 	return FALSE;
 }
 
-BOOL enum_processes()
+/*
+* EnumProcesses
+*
+* Purpose:
+*
+* Take SystemProcessInformation snapshot and iterate over every process
+* Open each process via PID and query ProcessRedirectionTrustPolicy
+*
+*/
+
+BOOL EnumProcesses()
 {
 	//
 	// Kinda based off this but without CRT and using RtlAllocateHeap / RtlFreeHeap instead 
@@ -129,7 +221,6 @@ BOOL enum_processes()
 	//
 
 	const size_t bufLen = retLen;
-
 	PVOID infoBuf = RtlAllocateHeap(
 		RtlProcessHeap(),
 		HEAP_ZERO_MEMORY,
@@ -166,7 +257,6 @@ BOOL enum_processes()
 				//			
 
 				if (sys_info->ImageName.Buffer) {
-					DbgPrint("PID: %d, PROCNAME: %ls\t", (ULONG)sys_info->UniqueProcessId, sys_info->ImageName.Buffer);
 
 					//
 					// Open the process now in order to query the protection
@@ -205,10 +295,10 @@ BOOL enum_processes()
 						// Do nothing as we can just skip this process
 						//
 
-						DbgPrint("[FAIL] Failed to open ( PID: %d, PROCNAME: %ls ) process with PROCESS_ALL_ACCESS\n",
-							(ULONG)sys_info->UniqueProcessId, 
-							sys_info->ImageName.Buffer
-							);
+						//DbgPrint("[FAIL] Failed to open ( PID: %d, PROCNAME: %ls ) process with PROCESS_ALL_ACCESS\n",
+						//	(ULONG)sys_info->UniqueProcessId, 
+						//	sys_info->ImageName.Buffer
+						//	);
 					}
 					else {
 						
@@ -218,14 +308,16 @@ BOOL enum_processes()
 
 						PROCESS_MITIGATION_REDIRECTION_TRUST_POLICY RedirectionTrustPolicy;
 
-
 						if (supGetProcessMitigationPolicy(hProcess,
 							(PROCESS_MITIGATION_POLICY)ProcessRedirectionTrustPolicy,
 							sizeof(PROCESS_MITIGATION_REDIRECTION_TRUST_POLICY),
 							&RedirectionTrustPolicy))
 						{
 							if (RedirectionTrustPolicy.Flags) {
-								DbgPrint("AuditRedirectionTrust( %d ),EnforceRedirectionTrust( %d )\n", RedirectionTrustPolicy.AuditRedirectionTrust, RedirectionTrustPolicy.EnforceRedirectionTrust);
+								DbgPrint("PID: %d, PROCNAME: %ls, AuditRedirectionTrust( %d ),EnforceRedirectionTrust( %d )\n", 
+									(ULONG)sys_info->UniqueProcessId, sys_info->ImageName.Buffer, 
+									RedirectionTrustPolicy.AuditRedirectionTrust, RedirectionTrustPolicy.EnforceRedirectionTrust
+								);
 							}
 						}
 
@@ -269,22 +361,4 @@ BOOL enum_processes()
 	);
 
 	return TRUE;
-}
-
-void CustomEntry() {
-	DbgPrint("[DEBUG] CustomEntry\n");
-
-	//
-	// Try and enable SeDebugPrivilege
-	//
-
-	if (FALSE == enable_sedebug())
-		RtlExitUserProcess(-1);
-
-	//
-	// Enum and check processes for ProcessRedirectionTrustPolicy mitigation
-	//
-
-	if (FALSE == enum_processes())
-		RtlExitUserProcess(-1);
 }
